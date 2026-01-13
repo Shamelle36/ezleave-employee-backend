@@ -204,6 +204,41 @@ export async function applyLeave(req, res) {
       'Bereavement Leave': 'BL'
     };
 
+    if (leave_type === 'Monetization of Leave Credits') {
+  // Additional validation for monetization
+  const { monetization_percentage, monetization_reason, monetization_amount } = req.body;
+  
+  if (!monetization_percentage || !monetization_reason || !monetization_amount) {
+    return res.status(400).json({
+      success: false,
+      message: "Monetization requires percentage, reason, and amount"
+    });
+  }
+  
+  // Validate percentage (typically 50% or more requires justification)
+  const percentage = parseInt(monetization_percentage);
+  if (percentage < 50) {
+    return res.status(400).json({
+      success: false,
+      message: "Monetization of less than 50% requires special approval"
+    });
+  }
+  
+  // Check if enough VL balance for monetization
+  const [vlBalance] = await sql`
+    SELECT vl_balance FROM leave_cards 
+    WHERE employee_id = ${employeeId}
+    ORDER BY id DESC LIMIT 1;
+  `;
+  
+  if (!vlBalance || vlBalance.vl_balance < number_of_days) {
+    return res.status(400).json({
+      success: false,
+      message: `Insufficient Vacation Leave balance for monetization. Available: ${vlBalance?.vl_balance || 0} days`
+    });
+  }
+}
+
     // VL/SL check
     if (leave_type === 'Vacation Leave' || leave_type === 'Sick Leave') {
       const [latestCard] = await sql`
