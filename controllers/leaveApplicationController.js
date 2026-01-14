@@ -154,6 +154,7 @@ export async function applyLeave(req, res) {
       number_of_days,  // Don't reassign this - it's a const
       commutation_requested,
       attachment,
+      signature_url,
       // Monetization specific fields
       monetization_reason,
       monetization_amount,
@@ -203,6 +204,13 @@ export async function applyLeave(req, res) {
       return res.status(404).json({ 
         success: false, 
         message: "Employee record not found" 
+      });
+    }
+
+    if (!signature_url) {
+      return res.status(400).json({
+        success: false,
+        message: "Signature is required for leave application"
       });
     }
 
@@ -355,6 +363,7 @@ export async function applyLeave(req, res) {
         leave_type, subtype, country, details,
         inclusive_dates, number_of_days, commutation_requested,
         attachment,
+        signature_url,
         status,
         monetization_reason,
         monetization_amount,
@@ -379,6 +388,7 @@ export async function applyLeave(req, res) {
         ${finalNumberOfDays},
         ${commutation_requested},
         ${attachment || null},
+        ${signature_url},
         'Pending',
         ${monetization_reason || null},
         ${monetization_amount || null},
