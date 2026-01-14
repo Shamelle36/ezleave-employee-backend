@@ -149,9 +149,9 @@ export async function applyLeave(req, res) {
       subtype,
       country,
       details,
-      date_from,
-      date_to,
-      number_of_days,
+      date_from,  // Don't reassign this - it's a const
+      date_to,    // Don't reassign this - it's a const
+      number_of_days,  // Don't reassign this - it's a const
       commutation_requested,
       attachment,
       // Monetization specific fields
@@ -168,6 +168,11 @@ export async function applyLeave(req, res) {
         message: "Missing required fields" 
       });
     }
+
+    // Create variables that we CAN modify
+    let finalDateFrom = date_from;
+    let finalDateTo = date_to;
+    let finalNumberOfDays = number_of_days;
 
     // Special validation for monetization
     if (leave_type === 'Monetization of Leave Credits') {
@@ -241,9 +246,9 @@ export async function applyLeave(req, res) {
           } else {
             currentBalance = parseFloat(latestCard.sl_balance) || 0;
           }
-          if (currentBalance < number_of_days) {
+          if (currentBalance < finalNumberOfDays) {
             hasSufficientBalance = false;
-            balanceCheckMessage = `Insufficient ${leave_type} credits. Available: ${currentBalance} days, Requested: ${number_of_days} days`;
+            balanceCheckMessage = `Insufficient ${leave_type} credits. Available: ${currentBalance} days, Requested: ${finalNumberOfDays} days`;
           }
         } else {
           hasSufficientBalance = false;
@@ -271,9 +276,9 @@ export async function applyLeave(req, res) {
 
         if (entitlement) {
           currentBalance = entitlement.total_days - entitlement.used_days;
-          if (currentBalance < number_of_days) {
+          if (currentBalance < finalNumberOfDays) {
             hasSufficientBalance = false;
-            balanceCheckMessage = `Insufficient ${leave_type} balance. Available: ${currentBalance} days, Requested: ${number_of_days} days`;
+            balanceCheckMessage = `Insufficient ${leave_type} balance. Available: ${currentBalance} days, Requested: ${finalNumberOfDays} days`;
           }
         } else {
           const defaultEntitlements = {
@@ -283,9 +288,9 @@ export async function applyLeave(req, res) {
             'EL': 0, 'BL': 0
           };
           currentBalance = defaultEntitlements[dbLeaveType] || 0;
-          if (currentBalance < number_of_days) {
+          if (currentBalance < finalNumberOfDays) {
             hasSufficientBalance = false;
-            balanceCheckMessage = `Insufficient ${leave_type} balance. Available: ${currentBalance} days (default), Requested: ${number_of_days} days`;
+            balanceCheckMessage = `Insufficient ${leave_type} balance. Available: ${currentBalance} days (default), Requested: ${finalNumberOfDays} days`;
           }
         }
       }
@@ -297,7 +302,7 @@ export async function applyLeave(req, res) {
           message: balanceCheckMessage,
           insufficient_balance: true,
           available_balance: currentBalance,
-          requested_days: number_of_days
+          requested_days: finalNumberOfDays
         });
       }
     }
@@ -314,8 +319,8 @@ export async function applyLeave(req, res) {
         }
       }
       
-      // If no days parsed, default to 0
-      number_of_days = parsedNumberOfDays || 0;
+      // Use the parsed number of days
+      finalNumberOfDays = parsedNumberOfDays || 0;
       
       // For non-separation reasons, check VL balance
       if (!is_separation_reason) {
@@ -338,8 +343,8 @@ export async function applyLeave(req, res) {
       }
       
       // Set date fields to null for monetization
-      date_from = null;
-      date_to = null;
+      finalDateFrom = null;
+      finalDateTo = null;
     }
 
     // 6️⃣ Insert leave application
@@ -368,10 +373,10 @@ export async function applyLeave(req, res) {
         ${subtype},
         ${country},
         ${details},
-        ${date_from && date_to 
-          ? sql`daterange(${date_from}::date, (${date_to}::date + INTERVAL '1 day')::date, '[)')`
+        ${finalDateFrom && finalDateTo 
+          ? sql`daterange(${finalDateFrom}::date, (${finalDateTo}::date + INTERVAL '1 day')::date, '[)')`
           : null},
-        ${number_of_days},
+        ${finalNumberOfDays},
         ${commutation_requested},
         ${attachment || null},
         'Pending',
