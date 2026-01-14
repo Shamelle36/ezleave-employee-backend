@@ -153,15 +153,38 @@ export async function applyLeave(req, res) {
       date_to,
       number_of_days,
       commutation_requested,
-      attachment
+      attachment,
+      // Monetization specific fields
+      monetization_reason,
+      monetization_amount,
+      leave_credits_monetized,
+      is_separation_reason
     } = req.body;
 
-    // 1️⃣ Validate required fields
-    if (!user_id || !leave_type || !date_from || !date_to || !number_of_days) {
+    // 1️⃣ Validate required fields - DIFFERENT FOR MONETIZATION
+    if (!user_id || !leave_type) {
       return res.status(400).json({ 
         success: false, 
         message: "Missing required fields" 
       });
+    }
+
+    // Special validation for monetization
+    if (leave_type === 'Monetization of Leave Credits') {
+      if (!monetization_reason || !leave_credits_monetized || !salary) {
+        return res.status(400).json({
+          success: false,
+          message: "Monetization requires reason, leave credits, and salary"
+        });
+      }
+    } else {
+      // For other leave types, require dates and number of days
+      if (!date_from || !date_to || !number_of_days) {
+        return res.status(400).json({ 
+          success: false, 
+          message: "Missing required fields for leave application" 
+        });
+      }
     }
 
     // 2️⃣ Fetch employee info
@@ -180,142 +203,146 @@ export async function applyLeave(req, res) {
 
     const employeeId = employee.id;
 
-    // 3️⃣ CHECK BALANCE BASED ON LEAVE TYPE (for validation only, no deduction)
-    let hasSufficientBalance = true;
-    let currentBalance = 0;
-    let balanceCheckMessage = '';
-    let dbLeaveTypeForDeduction = null;
+    // 3️⃣ CHECK BALANCE FOR NON-MONETIZATION LEAVE TYPES
+    if (leave_type !== 'Monetization of Leave Credits') {
+      let hasSufficientBalance = true;
+      let currentBalance = 0;
+      let balanceCheckMessage = '';
 
-    const leaveTypeMapping = {
-      'Mandatory/Forced Leave': 'ML',
-      'Special Privilege Leave': 'SPL',
-      'Maternity Leave': 'MAT',
-      'Paternity Leave': 'PAT',
-      'Solo Parent Leave': 'SOLO',
-      'VAWC Leave': 'VAWC',
-      'Rehabilitation Leave': 'RL',
-      'Special Leave Benefits for Women': 'MCW',
-      'Study Leave': 'STUDY',
-      'Special Emergency (Calamity) Leave': 'CALAMITY',
-      'Monetization of Leave Credits': 'MOL',
-      'Terminal Leave': 'TL',
-      'Adoption Leave': 'AL',
-      'Emergency Leave': 'EL',
-      'Bereavement Leave': 'BL'
-    };
+      const leaveTypeMapping = {
+        'Mandatory/Forced Leave': 'ML',
+        'Special Privilege Leave': 'SPL',
+        'Maternity Leave': 'MAT',
+        'Paternity Leave': 'PAT',
+        'Solo Parent Leave': 'SOLO',
+        'VAWC Leave': 'VAWC',
+        'Rehabilitation Leave': 'RL',
+        'Special Leave Benefits for Women': 'MCW',
+        'Study Leave': 'STUDY',
+        'Special Emergency (Calamity) Leave': 'CALAMITY',
+        'Terminal Leave': 'TL',
+        'Adoption Leave': 'AL',
+        'Emergency Leave': 'EL',
+        'Bereavement Leave': 'BL'
+      };
 
-    if (leave_type === 'Monetization of Leave Credits') {
-  // Additional validation for monetization
-  const { monetization_percentage, monetization_reason, monetization_amount } = req.body;
-  
-  if (!monetization_percentage || !monetization_reason || !monetization_amount) {
-    return res.status(400).json({
-      success: false,
-      message: "Monetization requires percentage, reason, and amount"
-    });
-  }
-  
-  // Validate percentage (typically 50% or more requires justification)
-  const percentage = parseInt(monetization_percentage);
-  if (percentage < 50) {
-    return res.status(400).json({
-      success: false,
-      message: "Monetization of less than 50% requires special approval"
-    });
-  }
-  
-  // Check if enough VL balance for monetization
-  const [vlBalance] = await sql`
-    SELECT vl_balance FROM leave_cards 
-    WHERE employee_id = ${employeeId}
-    ORDER BY id DESC LIMIT 1;
-  `;
-  
-  if (!vlBalance || vlBalance.vl_balance < number_of_days) {
-    return res.status(400).json({
-      success: false,
-      message: `Insufficient Vacation Leave balance for monetization. Available: ${vlBalance?.vl_balance || 0} days`
-    });
-  }
-}
-
-    // VL/SL check
-    if (leave_type === 'Vacation Leave' || leave_type === 'Sick Leave') {
-      const [latestCard] = await sql`
-        SELECT *
-        FROM leave_cards
-        WHERE employee_id = ${employeeId}
-        ORDER BY id DESC
-        LIMIT 1;
-      `;
-      if (latestCard) {
-        if (leave_type === 'Vacation Leave') {
-          currentBalance = parseFloat(latestCard.vl_balance) || 0;
+      // VL/SL check
+      if (leave_type === 'Vacation Leave' || leave_type === 'Sick Leave') {
+        const [latestCard] = await sql`
+          SELECT *
+          FROM leave_cards
+          WHERE employee_id = ${employeeId}
+          ORDER BY id DESC
+          LIMIT 1;
+        `;
+        if (latestCard) {
+          if (leave_type === 'Vacation Leave') {
+            currentBalance = parseFloat(latestCard.vl_balance) || 0;
+          } else {
+            currentBalance = parseFloat(latestCard.sl_balance) || 0;
+          }
+          if (currentBalance < number_of_days) {
+            hasSufficientBalance = false;
+            balanceCheckMessage = `Insufficient ${leave_type} credits. Available: ${currentBalance} days, Requested: ${number_of_days} days`;
+          }
         } else {
-          currentBalance = parseFloat(latestCard.sl_balance) || 0;
-        }
-        if (currentBalance < number_of_days) {
           hasSufficientBalance = false;
-          balanceCheckMessage = `Insufficient ${leave_type} credits. Available: ${currentBalance} days, Requested: ${number_of_days} days`;
+          balanceCheckMessage = 'No leave card record found';
         }
-      } else {
-        hasSufficientBalance = false;
-        balanceCheckMessage = 'No leave card record found';
+      } 
+      // Other leave types
+      else {
+        const dbLeaveType = leaveTypeMapping[leave_type];
+        if (!dbLeaveType) {
+          return res.status(400).json({
+            success: false,
+            message: `Invalid leave type: ${leave_type}`
+          });
+        }
+
+        const [entitlement] = await sql`
+          SELECT *
+          FROM leave_entitlements
+          WHERE user_id = ${employeeId}
+            AND leave_type = ${dbLeaveType}
+            AND year = EXTRACT(YEAR FROM CURRENT_DATE)
+          LIMIT 1;
+        `;
+
+        if (entitlement) {
+          currentBalance = entitlement.total_days - entitlement.used_days;
+          if (currentBalance < number_of_days) {
+            hasSufficientBalance = false;
+            balanceCheckMessage = `Insufficient ${leave_type} balance. Available: ${currentBalance} days, Requested: ${number_of_days} days`;
+          }
+        } else {
+          const defaultEntitlements = {
+            'ML': 5, 'SPL': 3, 'MAT': 105, 'PAT': 7, 'SOLO': 7,
+            'VAWC': 10, 'RL': 0, 'MCW': 60, 'STUDY': 180,
+            'CALAMITY': 5, 'TL': 0, 'AL': 0,
+            'EL': 0, 'BL': 0
+          };
+          currentBalance = defaultEntitlements[dbLeaveType] || 0;
+          if (currentBalance < number_of_days) {
+            hasSufficientBalance = false;
+            balanceCheckMessage = `Insufficient ${leave_type} balance. Available: ${currentBalance} days (default), Requested: ${number_of_days} days`;
+          }
+        }
       }
-    } 
-    // Other leave types
-    else {
-      const dbLeaveType = leaveTypeMapping[leave_type];
-      if (!dbLeaveType) {
+
+      // 4️⃣ Reject if insufficient balance
+      if (!hasSufficientBalance) {
         return res.status(400).json({
           success: false,
-          message: `Invalid leave type: ${leave_type}`
+          message: balanceCheckMessage,
+          insufficient_balance: true,
+          available_balance: currentBalance,
+          requested_days: number_of_days
         });
       }
-      dbLeaveTypeForDeduction = dbLeaveType;
+    }
 
-      const [entitlement] = await sql`
-        SELECT *
-        FROM leave_entitlements
-        WHERE user_id = ${employeeId}
-          AND leave_type = ${dbLeaveType}
-          AND year = EXTRACT(YEAR FROM CURRENT_DATE)
-        LIMIT 1;
-      `;
-
-      if (entitlement) {
-        currentBalance = entitlement.total_days - entitlement.used_days;
-        if (currentBalance < number_of_days) {
-          hasSufficientBalance = false;
-          balanceCheckMessage = `Insufficient ${leave_type} balance. Available: ${currentBalance} days, Requested: ${number_of_days} days`;
-        }
-      } else {
-        const defaultEntitlements = {
-          'ML': 5, 'SPL': 3, 'MAT': 105, 'PAT': 7, 'SOLO': 7,
-          'VAWC': 10, 'RL': 0, 'MCW': 60, 'STUDY': 180,
-          'CALAMITY': 5, 'MOL': 0, 'TL': 0, 'AL': 0,
-          'EL': 0, 'BL': 0
-        };
-        currentBalance = defaultEntitlements[dbLeaveType] || 0;
-        if (currentBalance < number_of_days) {
-          hasSufficientBalance = false;
-          balanceCheckMessage = `Insufficient ${leave_type} balance. Available: ${currentBalance} days (default), Requested: ${number_of_days} days`;
+    // 5️⃣ MONETIZATION SPECIFIC VALIDATION
+    if (leave_type === 'Monetization of Leave Credits') {
+      // Parse leave credits to calculate number of days for database
+      let parsedNumberOfDays = 0;
+      
+      if (leave_credits_monetized) {
+        const matches = leave_credits_monetized.match(/(\d+(\.\d+)?)/g);
+        if (matches) {
+          parsedNumberOfDays = matches.reduce((sum, day) => sum + parseFloat(day), 0);
         }
       }
+      
+      // If no days parsed, default to 0
+      number_of_days = parsedNumberOfDays || 0;
+      
+      // For non-separation reasons, check VL balance
+      if (!is_separation_reason) {
+        const [vlBalance] = await sql`
+          SELECT vl_balance FROM leave_cards 
+          WHERE employee_id = ${employeeId}
+          ORDER BY id DESC LIMIT 1;
+        `;
+        
+        // Parse the leave credits input for VL
+        const vlMatch = leave_credits_monetized.match(/(\d+(\.\d+)?)\s*days?\s*VL/i);
+        const vlRequested = vlMatch ? parseFloat(vlMatch[1]) : 0;
+        
+        if (vlRequested > 0 && (!vlBalance || vlBalance.vl_balance < vlRequested)) {
+          return res.status(400).json({
+            success: false,
+            message: `Insufficient VL balance for monetization. Available: ${vlBalance?.vl_balance || 0} days`
+          });
+        }
+      }
+      
+      // Set date fields to null for monetization
+      date_from = null;
+      date_to = null;
     }
 
-    // 4️⃣ Reject if insufficient balance
-    if (!hasSufficientBalance) {
-      return res.status(400).json({
-        success: false,
-        message: balanceCheckMessage,
-        insufficient_balance: true,
-        available_balance: currentBalance,
-        requested_days: number_of_days
-      });
-    }
-
-    // 5️⃣ Insert leave application (status pending) — NO BALANCE DEDUCTION HERE
+    // 6️⃣ Insert leave application
     const result = await sql`
       INSERT INTO leave_applications (
         user_id, first_name, middle_name, last_name,
@@ -323,7 +350,10 @@ export async function applyLeave(req, res) {
         leave_type, subtype, country, details,
         inclusive_dates, number_of_days, commutation_requested,
         attachment,
-        status
+        status,
+        monetization_reason,
+        monetization_amount,
+        leave_credits_monetized
       )
       VALUES (
         ${user_id},
@@ -338,34 +368,35 @@ export async function applyLeave(req, res) {
         ${subtype},
         ${country},
         ${details},
-        daterange(
-          ${date_from}::date,
-          (${date_to}::date + INTERVAL '1 day')::date,
-          '[)'
-        ),
+        ${date_from && date_to 
+          ? sql`daterange(${date_from}::date, (${date_to}::date + INTERVAL '1 day')::date, '[)')`
+          : null},
         ${number_of_days},
         ${commutation_requested},
         ${attachment || null},
-        'Pending'
+        'Pending',
+        ${monetization_reason || null},
+        ${monetization_amount || null},
+        ${leave_credits_monetized || null}
       )
       RETURNING *;
     `;
 
     const leave = result[0];
 
-    // 6️⃣ Send notification (no balance update)
+    // 7️⃣ Send notification
     await sql`
       INSERT INTO notifications (user_id, message)
       VALUES (
         ${user_id},
-        ${`${employee.first_name} ${employee.last_name} filed a ${leave_type} leave on ${date_filing}`}
+        ${`${employee.first_name} ${employee.last_name} filed a ${leave_type} on ${date_filing}`}
       );
     `;
 
     return res.status(201).json({ 
       success: true, 
       leave,
-      message: `Leave application submitted successfully. ${balanceCheckMessage || `Available balance: ${currentBalance} days`}`
+      message: `Leave application submitted successfully.`
     });
 
   } catch (err) {
