@@ -19,7 +19,7 @@ router.post("/check-balance", checkLeaveBalance);
 router.get("/holidays/all", async (req, res) => {
   try {
     const holidays = await sql`
-      SELECT * FROM local_holiday 
+      SELECT * FROM local_holidays
       ORDER BY date;
     `;
     
@@ -43,7 +43,7 @@ router.get("/holidays/year/:year", async (req, res) => {
     const { year } = req.params;
     
     const holidays = await sql`
-      SELECT * FROM local_holiday 
+      SELECT * FROM local_holidays
       WHERE EXTRACT(YEAR FROM date) = ${parseInt(year)}
          OR is_recurring = true
       ORDER BY date;
