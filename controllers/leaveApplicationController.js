@@ -449,7 +449,8 @@ export async function getLeaveHistory(req, res) {
         approver_name,
         approver_date,
         remarks,
-        attachment
+        attachment,
+        signature_url
       FROM leave_applications
       WHERE user_id = ${userId}
       ORDER BY date_filing DESC;
@@ -491,6 +492,7 @@ export async function getLeaveHistory(req, res) {
       approver_date: leave.approver_date,
       remarks: leave.remarks,
       attachment: leave.attachment,
+      signature_url: leave.signature_url,
     }));
 
     res.json({ success: true, history });
