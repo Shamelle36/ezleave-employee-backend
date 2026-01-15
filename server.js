@@ -17,7 +17,6 @@ import job from './config/cron.js';
 import { Webhook } from 'svix';
 import bodyParser from 'body-parser';
 import cors from 'cors';
-import signatureRoutes from './routes/signatureRoutes.js';
 
 
     dotenv.config(); 
@@ -105,7 +104,6 @@ import signatureRoutes from './routes/signatureRoutes.js';
     app.use("/api/leaveCard", leaveCardRoutes);
     app.use("/api/employeeTerms", employeeTermsRoute);
     app.use('/api/push-tokens', pushTokensRouter);
-    app.use('/api/signature', signatureRoutes);
 
     app.get("/api/db-name", async (req, res) => {
       try {
