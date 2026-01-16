@@ -132,6 +132,39 @@ export async function checkEmployeeEmail(req, res) {
     `;
 
     if (!employee) {
+      return res.status(404).json({ message: 'This application is only available to authorized employees. If you think you should have access, please contact HR or the system administrator.' });
+    }
+
+    if (employee.user_id) {
+      return res.status(403).json({
+        message: 'This email is already registered. Please log in instead.',
+      });
+    }
+
+    res.status(200).json({ message: 'Authorized', employee });
+  } catch (error) {
+    console.error('Error checking employee email:', error);
+    res.status(500).json({ message: 'Internal server error' });
+  }
+}
+
+// Add this to your employeeController.js
+export async function checkLoginEmail(req, res) {
+  try {
+    const { email } = req.body;
+
+    if (!email) {
+      return res.status(400).json({ 
+        success: false,
+        message: 'Email is required' 
+      });
+    }
+
+    const [employee] = await sql`
+      SELECT * FROM employee_list WHERE email = ${email}
+    `;
+
+    if (!employee) {
       return res.status(404).json({ 
         success: false,
         message: 'This application is only available to authorized employees. If you think you should have access, please contact HR or the system administrator.' 
@@ -147,21 +180,17 @@ export async function checkEmployeeEmail(req, res) {
       });
     }
 
-    if (employee.user_id) {
-      return res.status(403).json({
-        success: false,
-        message: 'This email is already registered. Please log in instead.',
-      });
-    }
-
+    // For LOGIN, we DON'T check if user_id exists
+    // Having a user_id means they have an account, which is GOOD for login
     res.status(200).json({ 
       success: true, 
-      message: 'Authorized', 
+      message: 'Authorized for login', 
       employee,
-      isActive: employee.status === 'active'
+      isActive: employee.status === 'active',
+      hasAccount: !!employee.user_id // Optional: inform frontend if account exists
     });
   } catch (error) {
-    console.error('Error checking employee email:', error);
+    console.error('Error checking login email:', error);
     res.status(500).json({ 
       success: false,
       message: 'Internal server error' 
