@@ -132,19 +132,40 @@ export async function checkEmployeeEmail(req, res) {
     `;
 
     if (!employee) {
-      return res.status(404).json({ message: 'This application is only available to authorized employees. If you think you should have access, please contact HR or the system administrator.' });
+      return res.status(404).json({ 
+        success: false,
+        message: 'This application is only available to authorized employees. If you think you should have access, please contact HR or the system administrator.' 
+      });
+    }
+
+    // Check if user is inactive
+    if (employee.status === 'inactive') {
+      return res.status(403).json({
+        success: false,
+        message: 'Your account is deactivated. Please contact HR or system administrator for assistance.',
+        status: 'inactive'
+      });
     }
 
     if (employee.user_id) {
       return res.status(403).json({
+        success: false,
         message: 'This email is already registered. Please log in instead.',
       });
     }
 
-    res.status(200).json({ message: 'Authorized', employee });
+    res.status(200).json({ 
+      success: true, 
+      message: 'Authorized', 
+      employee,
+      isActive: employee.status === 'active'
+    });
   } catch (error) {
     console.error('Error checking employee email:', error);
-    res.status(500).json({ message: 'Internal server error' });
+    res.status(500).json({ 
+      success: false,
+      message: 'Internal server error' 
+    });
   }
 }
 
