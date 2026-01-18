@@ -2,38 +2,83 @@ import { sql } from "../config/db.js";
 
 export const getNotifications = async (req, res) => {
   const { userId } = req.params;
+  const { hide_self_filed = false } = req.query; // Add this parameter
 
   console.log("📩 API called for userId:", userId);
 
   try {
-    // Get notifications with formatted time
-    const notifications = await sql`
-      SELECT 
-        id,
-        user_id,
-        message,
-        read,
-        created_at,
-        TO_CHAR(created_at, 'YYYY-MM-DD HH24:MI') as formatted_time
-      FROM notifications 
-      WHERE user_id = ${userId}
-      ORDER BY created_at DESC
-    `;
+    let query;
+    
+    if (hide_self_filed === 'true') {
+      // Filter out self-filed notifications
+      query = sql`
+        SELECT 
+          id,
+          user_id,
+          message,
+          read,
+          created_at,
+          TO_CHAR(created_at, 'YYYY-MM-DD HH24:MI') as formatted_time
+        FROM notifications 
+        WHERE user_id = ${userId}
+        AND message NOT LIKE CONCAT('%', (
+          SELECT CONCAT(first_name, ' ', last_name)
+          FROM employees
+          WHERE user_id = ${userId}
+          LIMIT 1
+        ), '%')
+        ORDER BY created_at DESC
+      `;
+    } else {
+      // Original query
+      query = sql`
+        SELECT 
+          id,
+          user_id,
+          message,
+          read,
+          created_at,
+          TO_CHAR(created_at, 'YYYY-MM-DD HH24:MI') as formatted_time
+        FROM notifications 
+        WHERE user_id = ${userId}
+        ORDER BY created_at DESC
+      `;
+    }
 
+    const notifications = await query;
     console.log(`✅ Found ${notifications.length} notifications for user ${userId}`);
 
-    // Get unread count separately
-    const [unreadCount] = await sql`
-      SELECT COUNT(*) as count
-      FROM notifications
-      WHERE user_id = ${userId} AND read = false
-    `;
+    // Get unread count (also filter if hiding self-filed)
+    let unreadCountQuery;
+    if (hide_self_filed === 'true') {
+      unreadCountQuery = sql`
+        SELECT COUNT(*) as count
+        FROM notifications
+        WHERE user_id = ${userId} 
+        AND read = false
+        AND message NOT LIKE CONCAT('%', (
+          SELECT CONCAT(first_name, ' ', last_name)
+          FROM employees
+          WHERE user_id = ${userId}
+          LIMIT 1
+        ), '%')
+      `;
+    } else {
+      unreadCountQuery = sql`
+        SELECT COUNT(*) as count
+        FROM notifications
+        WHERE user_id = ${userId} AND read = false
+      `;
+    }
+
+    const [unreadCount] = await unreadCountQuery;
 
     res.json({
       success: true,
       notifications: notifications,
       unread_count: parseInt(unreadCount?.count || 0),
-      total: notifications.length
+      total: notifications.length,
+      hide_self_filed: hide_self_filed === 'true'
     });
   } catch (error) {
     console.error("❌ Error fetching notifications:", error);
