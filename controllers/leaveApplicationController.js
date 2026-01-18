@@ -83,7 +83,8 @@ export async function checkLeaveBalance(req, res) {
         'Terminal Leave': 'TL',
         'Adoption Leave': 'AL',
         'Emergency Leave': 'EL',  // Added based on your mapping
-        'Bereavement Leave': 'BL'  // Added based on your mapping
+        'Bereavement Leave': 'BL',  // Added based on your mapping
+        'Wellness Leave': 'WL'
       };
 
       const dbLeaveType = leaveTypeMapping[leave_type];
