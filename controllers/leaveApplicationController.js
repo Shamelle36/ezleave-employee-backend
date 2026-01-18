@@ -237,7 +237,8 @@ export async function applyLeave(req, res) {
         'Terminal Leave': 'TL',
         'Adoption Leave': 'AL',
         'Emergency Leave': 'EL',
-        'Bereavement Leave': 'BL'
+        'Bereavement Leave': 'BL',
+        'Wellness Leave': 'WL'
       };
 
       // VL/SL check
