@@ -9,7 +9,7 @@ export const getNotifications = async (req, res) => {
     // Get employee's full name first
     const [employee] = await sql`
       SELECT CONCAT(first_name, ' ', last_name) as full_name
-      FROM employees
+      FROM employee_list
       WHERE user_id = ${userId}
       LIMIT 1;
     `;
