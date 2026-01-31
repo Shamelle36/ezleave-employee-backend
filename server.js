@@ -12,6 +12,7 @@ import notificationRoutes from "./routes/notificationRoute.js";
 import leaveCardRoutes from "./routes/leaveCardRoute.js";
 import employeeTermsRoute from "./routes/employeeTermsRoute.js";
 import pushTokensRouter from './routes/pushToken.js';
+import loginCodeRoute from './routes/loginCodeRoute.js';
 import { initDB, initDBDepartment, initDBLeaveApplication, initDBLeaveEntitlement, sql } from './config/db.js'; 
 import job from './config/cron.js'; 
 import { Webhook } from 'svix';
@@ -104,6 +105,7 @@ import cors from 'cors';
     app.use("/api/leaveCard", leaveCardRoutes);
     app.use("/api/employeeTerms", employeeTermsRoute);
     app.use('/api/push-tokens', pushTokensRouter);
+    app.use('/api/login-codes', loginCodeRoute);
 
     app.get("/api/db-name", async (req, res) => {
       try {
