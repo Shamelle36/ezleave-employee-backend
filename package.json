@@ -16,6 +16,7 @@
     "@neondatabase/serverless": "^1.0.2",
     "@upstash/ratelimit": "^2.0.6",
     "@upstash/redis": "^1.35.4",
+    "bcrypt": "^6.0.0",
     "cors": "^2.8.5",
     "cron": "^4.3.3",
     "dotenv": "^17.2.3",
