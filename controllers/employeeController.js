@@ -291,3 +291,44 @@ export async function createUserRecord(req, res) {
     res.status(500).json({ message: "Internal server error" });
   }
 }
+
+
+// Add this to employeeController.js
+export async function getEmployeeById(req, res) {
+  try {
+    const { id } = req.params;
+    
+    const [employee] = await sql`
+      SELECT * FROM employee_list WHERE id = ${id}`
+    
+    if (!employee) {
+      return res.status(404).json({ message: 'Employee not found' });
+    }
+
+    res.status(200).json(employee);
+
+  } catch (error) {
+    console.log('Error fetching employee:', error);
+    res.status(500).json({ message: 'Internal server error' });
+  }
+}
+
+// Add this to get employee by email
+export async function getEmployeeByEmail(req, res) {
+  try {
+    const { email } = req.params;
+    
+    const [employee] = await sql`
+      SELECT * FROM employee_list WHERE email = ${email}`
+    
+    if (!employee) {
+      return res.status(404).json({ message: 'Employee not found' });
+    }
+
+    res.status(200).json(employee);
+
+  } catch (error) {
+    console.log('Error fetching employee:', error);
+    res.status(500).json({ message: 'Internal server error' });
+  }
+}
