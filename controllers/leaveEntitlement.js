@@ -48,7 +48,7 @@ export async function getLeaveEntitlements(req, res) {
     const otherLeaves = await sql`
       SELECT *
       FROM leave_entitlements
-      WHERE employee_id = ${employeeId}
+      WHERE user_id = ${employeeId}
       AND leave_type NOT IN ('VL', 'SL')
       ORDER BY created_at DESC
     `;
