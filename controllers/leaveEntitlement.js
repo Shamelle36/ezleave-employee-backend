@@ -1,8 +1,8 @@
 import { sql } from "../config/db.js";
 
 export async function getLeaveEntitlements(req, res) {
-  const { userId } = req.params;
-  console.log("Fetching leave data for Clerk user:", userId);
+  const { employeeId } = req.params;
+  console.log("Fetching leave data for employee:", employeeId);
 
   const leaveTypeNames = {
     VL: "Vacation Leave",
@@ -23,19 +23,18 @@ export async function getLeaveEntitlements(req, res) {
   };
 
   try {
-    // 1️⃣ Get employee id from Clerk user_id - FIX THIS LINE
+    // ✅ 1️⃣ Validate employee exists (PRIMARY KEY)
     const [employee] = await sql`
       SELECT id
       FROM employee_list
-      WHERE user_id = ${userId}
+      WHERE id = ${employeeId}
     `;
+
     if (!employee) {
       return res.status(404).json({ message: "Employee not found" });
     }
 
-    const employeeId = employee.id;
-
-    // 2️⃣ Fetch all leave cards for this employee, order by period DESC
+    // ✅ 2️⃣ Leave cards (VL & SL)
     const leaveCards = await sql`
       SELECT *
       FROM leave_cards
@@ -43,58 +42,52 @@ export async function getLeaveEntitlements(req, res) {
       ORDER BY id DESC
     `;
 
-    let leaveCard = null;
-    if (leaveCards && leaveCards.length > 0) {
-      leaveCard = leaveCards[0];
-    }
+    const leaveCard = leaveCards?.[0] ?? null;
 
-    // 3️⃣ Fetch other leave entitlements for this employee
+    // ✅ 3️⃣ Other leave entitlements
     const otherLeaves = await sql`
       SELECT *
       FROM leave_entitlements
-      WHERE user_id = ${employeeId}
+      WHERE employee_id = ${employeeId}
       AND leave_type NOT IN ('VL', 'SL')
       ORDER BY created_at DESC
     `;
 
     const leaveData = [];
 
-    // 4️⃣ VL & SL from leaveCard
+    // ✅ 4️⃣ VL & SL
     if (leaveCard) {
-      leaveData.push({
-        leave_type: "VL",
-        type_name: leaveTypeNames["VL"],
-        balance_days: Number(leaveCard.vl_balance) || 0,
-        total_days: null,
-      });
-      leaveData.push({
-        leave_type: "SL",
-        type_name: leaveTypeNames["SL"],
-        balance_days: Number(leaveCard.sl_balance) || 0,
-        total_days: null,
-      });
-    } else {
-      console.warn(`No leave cards found for employee ${employeeId}`);
+      leaveData.push(
+        {
+          leave_type: "VL",
+          type_name: leaveTypeNames.VL,
+          balance_days: Number(leaveCard.vl_balance) || 0,
+          total_days: null,
+        },
+        {
+          leave_type: "SL",
+          type_name: leaveTypeNames.SL,
+          balance_days: Number(leaveCard.sl_balance) || 0,
+          total_days: null,
+        }
+      );
     }
 
-    // 5️⃣ Other leave entitlements
-    if (otherLeaves && otherLeaves.length > 0) {
-      otherLeaves.forEach((leave) => {
-        leaveData.push({
-          leave_type: leave.leave_type,
-          type_name: leaveTypeNames[leave.leave_type] || leave.leave_type,
-          balance_days: Number(leave.balance_days) || 0,
-          total_days: Number(leave.total_days) || 0,
-        });
+    // ✅ 5️⃣ Other leaves (KEEP leaveTypeNames)
+    otherLeaves.forEach((leave) => {
+      leaveData.push({
+        leave_type: leave.leave_type,
+        type_name: leaveTypeNames[leave.leave_type] || leave.leave_type,
+        balance_days: Number(leave.balance_days) || 0,
+        total_days: Number(leave.total_days) || 0,
       });
-    } else {
-      console.log(`No other leave entitlements found for employee ${employeeId}`);
-    }
+    });
 
     console.log("Final leave data:", leaveData);
     return res.status(200).json(leaveData);
+
   } catch (error) {
     console.error("Error fetching leave data:", error);
-    return res.status(500).json({ message: "Internal server error", error: error.message });
+    return res.status(500).json({ message: "Internal server error" });
   }
 }
